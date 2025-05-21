@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: students-get-deployment
+  labels:
+    app: students-get
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: students-get
+  template:
+    metadata:
+      labels:
+        app: students-get
+    spec:
+      containers:
+        - name: students-get
+          image: hamiltonlg/students-get-service:sha-8e7ae8e
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MONGO_URI
+              value: mongodb://mongo-service:27017
