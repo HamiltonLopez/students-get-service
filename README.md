@@ -1,46 +1,34 @@
 # Students Get Service
 
-Servicio responsable de listar todos los estudiantes registrados en el sistema.
-
-## Funcionalidad
-
-Este servicio expone un endpoint GET que permite obtener la lista completa de estudiantes almacenados en la base de datos MongoDB.
-
-## Especificaciones Técnicas
-
-- **Puerto**: 8082 (interno), 30082 (NodePort)
-- **Endpoint**: GET `/students`
-- **Runtime**: Go
-- **Base de Datos**: MongoDB
+Este servicio es parte del sistema de gestión de estudiantes y se encarga de listar todos los estudiantes con capacidades de paginación y filtrado.
 
 ## Estructura del Servicio
 
 ```
 students-get-service/
-├── k8s/
+├── controllers/     # Controladores REST
+├── models/         # Modelos de datos
+├── repositories/   # Capa de acceso a datos
+├── services/      # Lógica de negocio
+├── k8s/           # Configuraciones de Kubernetes
 │   ├── deployment.yaml
-│   └── service.yaml
-├── src/
-│   ├── main.go
-│   ├── handlers/
-│   ├── models/
-│   └── config/
-├── Dockerfile
-└── README.md
+│   ├── service.yaml
+│   └── ingress.yaml
+└── test/          # Scripts de prueba
+    └── test-get.sh
 ```
 
-## API Endpoint
+## Endpoints
 
 ### GET /students
+Lista todos los estudiantes con soporte para paginación.
 
-Retorna la lista de todos los estudiantes.
+**Parámetros de Query:**
+- `limit`: Número de registros por página (default: 10)
+- `skip`: Número de registros a saltar (default: 0)
+- `sort`: Campo por el cual ordenar (default: "name")
 
-#### Query Parameters
-- `limit` (opcional): Número máximo de resultados
-- `skip` (opcional): Número de resultados a saltar
-- `sort` (opcional): Campo por el cual ordenar
-
-#### Response
+**Response (200 OK):**
 ```json
 {
     "students": [
@@ -48,108 +36,163 @@ Retorna la lista de todos los estudiantes.
             "id": "string",
             "name": "string",
             "age": number,
-            "email": "string",
-            "created_at": "timestamp"
+            "email": "string"
         }
     ],
-    "total": number
+    "total": number,
+    "page": number,
+    "pages": number
 }
 ```
 
 ## Configuración Kubernetes
 
 ### Deployment
-- **Replicas**: 3
-- **Imagen**: hamiltonlg/students-get-service:latest
-- **Variables de Entorno**:
-  - MONGO_URI: mongodb://mongo-service:27017
+El servicio se despliega con las siguientes especificaciones:
+- Replicas: 1
+- Puerto: 8080
+- Imagen: students-get-service:latest
 
 ### Service
-- **Tipo**: NodePort
-- **Puerto**: 8082 -> 30082
+- Tipo: NodePort
+- Puerto: 8080
+- NodePort: 30082
 
-## Despliegue
+### Ingress
+- Path: /students
+- Servicio: students-get-service
+- Puerto: 8080
 
+## Despliegue en Kubernetes
+
+### 1. Aplicar configuraciones
 ```bash
-kubectl apply -f k8s/
+# Crear el deployment
+kubectl apply -f k8s/deployment.yaml
+
+# Crear el service
+kubectl apply -f k8s/service.yaml
+
+# Crear el ingress
+kubectl apply -f k8s/ingress.yaml
 ```
 
-## Verificación
-
-1. Verificar el deployment:
+### 2. Verificar el despliegue
 ```bash
+# Verificar el deployment
 kubectl get deployment students-get-deployment
-```
+kubectl describe deployment students-get-deployment
 
-2. Verificar los pods:
-```bash
+# Verificar los pods
 kubectl get pods -l app=students-get
+kubectl describe pod -l app=students-get
+
+# Verificar el service
+kubectl get svc students-get-service
+kubectl describe svc students-get-service
+
+# Verificar el ingress
+kubectl get ingress students-get-ingress
+kubectl describe ingress students-get-ingress
 ```
 
-3. Verificar el servicio:
+### 3. Verificar logs
 ```bash
-kubectl get svc students-get-service
+# Ver logs de los pods
+kubectl logs -l app=students-get
+```
+
+### 4. Escalar el servicio
+```bash
+# Escalar a más réplicas si es necesario
+kubectl scale deployment students-get-deployment --replicas=3
+```
+
+### 5. Actualizar el servicio
+```bash
+# Actualizar la imagen del servicio
+kubectl set image deployment/students-get-deployment students-get=students-get-service:nueva-version
+```
+
+### 6. Eliminar recursos
+```bash
+# Si necesitas eliminar los recursos
+kubectl delete -f k8s/ingress.yaml
+kubectl delete -f k8s/service.yaml
+kubectl delete -f k8s/deployment.yaml
 ```
 
 ## Pruebas
 
-### Obtener todos los estudiantes
+El servicio incluye un script de pruebas automatizadas (`test/test-get.sh`) que verifica:
+
+1. Obtención de lista de estudiantes
+2. Paginación correcta
+3. Ordenamiento de resultados
+4. Manejo de parámetros inválidos
+
+Para ejecutar las pruebas:
 ```bash
-curl http://localhost:30082/students
+./test/test-get.sh
 ```
 
-### Obtener estudiantes con paginación
+También se puede ejecutar como parte de la suite completa de pruebas:
 ```bash
-curl http://localhost:30082/students?limit=10&skip=0
+./test-all-services.sh
 ```
 
-## Logs
+### Casos de Prueba
 
-Ver logs de un pod específico:
-```bash
-kubectl logs -f <pod-name>
-```
+1. **Test 1:** Obtener todos los estudiantes
+   - Verifica la estructura de la respuesta
+   - Comprueba el conteo total de estudiantes
 
-## Monitoreo
+2. **Test 2:** Probar paginación
+   - Verifica límite de registros por página
+   - Comprueba el funcionamiento del skip
 
-### Métricas Importantes
-- Tiempo de respuesta del endpoint
-- Número de registros retornados
-- Uso de recursos (CPU/Memoria)
-- Latencia de consulta a MongoDB
+3. **Test 3:** Probar ordenamiento
+   - Verifica el ordenamiento por diferentes campos
+   - Comprueba el orden ascendente/descendente
+
+4. **Test 4:** Parámetros inválidos
+   - Prueba con valores no válidos
+   - Verifica el manejo de errores
+
+## Variables de Entorno
+
+- `MONGODB_URI`: URI de conexión a MongoDB (default: "mongodb://mongo-service:27017")
+- `DATABASE_NAME`: Nombre de la base de datos (default: "studentsdb")
+- `COLLECTION_NAME`: Nombre de la colección (default: "students")
+- `PAGE_SIZE`: Tamaño de página por defecto (default: 10)
+
+## Dependencias
+
+- Go 1.19+
+- MongoDB
+- Kubernetes 1.19+
+- Ingress NGINX Controller
+
+## Consideraciones de Seguridad
+
+1. Validación de parámetros de consulta
+2. Límites en el tamaño de página
+3. Sanitización de parámetros de ordenamiento
+4. Manejo seguro de errores
+
+## Monitoreo y Logs
+
+- Endpoint de health check: `/health`
+- Logs en formato JSON
+- Métricas de rendimiento:
+  - Tiempo de respuesta
+  - Número de registros procesados
+  - Uso de memoria en paginación
 
 ## Solución de Problemas
 
-1. **Error de Conexión a MongoDB**:
-   - Verificar la variable MONGO_URI
-   - Comprobar conectividad con mongo-service
-   - Revisar logs de MongoDB
-
-2. **Rendimiento Lento**:
-   - Verificar índices en MongoDB
-   - Comprobar el tamaño de la respuesta
-   - Analizar la consulta MongoDB
-
-3. **Pod en CrashLoopBackOff**:
-   - Verificar logs del pod
-   - Comprobar recursos asignados
-   - Verificar configuración del deployment
-
-4. **Servicio no accesible**:
-   - Verificar el estado del service
-   - Comprobar la configuración de NodePort
-   - Verificar reglas de firewall
-
-## Optimización
-
-1. **Índices MongoDB**:
-   - Crear índices para campos frecuentemente consultados
-   - Mantener estadísticas actualizadas
-
-2. **Caché**:
-   - Implementar caché para consultas frecuentes
-   - Configurar tiempo de expiración apropiado
-
-3. **Paginación**:
-   - Utilizar skip/limit para grandes conjuntos de datos
-   - Implementar cursor-based pagination para mejor rendimiento 
+1. Verificar la conexión con MongoDB
+2. Comprobar los logs del pod
+3. Validar la configuración del Ingress
+4. Verificar el estado del servicio en Kubernetes
+5. Revisar la configuración de paginación 
